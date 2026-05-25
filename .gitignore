@@ -1,0 +1,14 @@
+.DS_Store
+.env
+*.log
+
+# skills
+.agents
+
+# Local extracted game/source archives can be large and should not be committed.
+balatro_src/
+*.love
+
+# Temporary release downloads.
+*.tar.gz
+*.zip

@@ -1,0 +1,32 @@
+{
+  "name": "balatro-mcp-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MCP server for Balatro mod development",
+  "license": "MIT",
+  "author": "4rcadia",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "regen:entities": "tsx src/scripts/regen-entities.ts",
+    "check:entities": "tsx src/scripts/check-entities.ts",
+    "audit:tools": "tsx src/scripts/audit-tools.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "packageManager": "pnpm@11.3.0+sha512.2c403d6594527287672b1f7056343a1f7c3634036a67ffabfcc2b3d7595d843768f8787148d1b57cf7956c90606bbd192857c363af19e96d2d0ec9ec5741d215",
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}
