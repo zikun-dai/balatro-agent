@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
+import { cardIdSchema, normalizeCardId, normalizeCardIds } from "./cardIds.js";
 
 const OPEN_BOOSTER_DESCRIPTION =
   "Opens a Booster Pack that you have already purchased from the shop, revealing the cards inside for selection. " +
@@ -27,7 +28,7 @@ const SKIP_BOOSTER_DESCRIPTION =
 const openBoosterSchema = z
   .object({
     card_id: z
-      .string()
+      .union([z.string(), z.number().int()])
       .describe("The ID of the Booster Pack in the shop to open. Must reference a purchased Booster Pack available in the current SHOP phase."),
     response_format: z
       .enum(["markdown", "json"])
@@ -39,10 +40,10 @@ const openBoosterSchema = z
 const selectBoosterCardSchema = z
   .object({
     card_id: z
-      .string()
+      .union([z.string(), z.number().int()])
       .describe("The ID of the card inside the open Booster Pack to select. Must reference a card currently revealed in the open pack."),
     targets: z
-      .array(z.string())
+      .array(cardIdSchema)
       .optional()
       .describe("Optional array of target card IDs for consumables that operate on specific cards (e.g. Tarots that enhance hand cards). Omit for cards that take no targets."),
     response_format: z
@@ -134,9 +135,10 @@ export function registerBoosterTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
+      const cardId = normalizeCardId(args.card_id);
       const envelope = await executeBoosterCommand(
         deps,
-        { kind: "open_booster", args: { card_id: args.card_id } },
+        { kind: "open_booster", args: { card_id: cardId } },
         format,
       );
       return { ...envelope };
@@ -152,9 +154,11 @@ export function registerBoosterTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
+      const cardId = normalizeCardId(args.card_id);
+      const targets = args.targets ? normalizeCardIds(args.targets) : undefined;
       const envelope = await executeBoosterCommand(
         deps,
-        { kind: "select_booster_card", args: { card_id: args.card_id, targets: args.targets } },
+        { kind: "select_booster_card", args: { card_id: cardId, targets } },
         format,
       );
       return { ...envelope };

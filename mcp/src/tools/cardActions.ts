@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
+import { normalizeCardId } from "./cardIds.js";
 
 const USE_CONSUMABLE_DESCRIPTION =
   "Uses a consumable card (Tarot, Planet, or Spectral) from your consumable slots, applying its effect to the game state immediately. " +
@@ -21,7 +22,7 @@ const SELL_CARD_DESCRIPTION =
 const useConsumableSchema = z
   .object({
     card_id: z
-      .string()
+      .union([z.string(), z.number().int()])
       .describe("The ID of the consumable card to use from your consumable slots."),
     response_format: z
       .enum(["markdown", "json"])
@@ -33,7 +34,7 @@ const useConsumableSchema = z
 const sellCardSchema = z
   .object({
     card_id: z
-      .string()
+      .union([z.string(), z.number().int()])
       .describe("The ID of the card to sell — must be a Joker or consumable in your slots."),
     response_format: z
       .enum(["markdown", "json"])
@@ -95,7 +96,7 @@ export function registerCardActionTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
-      const envelope = await executeCardAction(deps, "use_consumable", args.card_id, format);
+      const envelope = await executeCardAction(deps, "use_consumable", normalizeCardId(args.card_id), format);
       return { ...envelope };
     },
   );
@@ -109,7 +110,7 @@ export function registerCardActionTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
-      const envelope = await executeCardAction(deps, "sell_card", args.card_id, format);
+      const envelope = await executeCardAction(deps, "sell_card", normalizeCardId(args.card_id), format);
       return { ...envelope };
     },
   );

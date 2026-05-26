@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
+import { cardIdSchema, normalizeCardIds } from "./cardIds.js";
 
 const REORDER_JOKERS_DESCRIPTION =
   "Reorders the Jokers in the player's Joker area to the explicit left-to-right order specified by an array of Joker card IDs, where the first ID becomes the leftmost Joker and the last ID becomes the rightmost. " +
@@ -15,7 +16,7 @@ const REORDER_JOKERS_DESCRIPTION =
 const reorderJokersSchema = z
   .object({
     order: z
-      .array(z.string())
+      .array(cardIdSchema)
       .min(0)
       .max(50)
       .describe(
@@ -44,7 +45,7 @@ async function executeReorderJokersCommand(
   try {
     const seq = await deps.bridgeClient.sendCommand({
       kind: "reorder_jokers",
-      args: { order },
+      args: { card_ids: order },
     });
     response = await deps.bridgeClient.awaitResponse(seq);
   } catch (err) {
@@ -83,7 +84,8 @@ export function registerReorderJokersTool(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
-      const envelope = await executeReorderJokersCommand(deps, args.order, format);
+      const order = normalizeCardIds(args.order);
+      const envelope = await executeReorderJokersCommand(deps, order, format);
       return { ...envelope };
     },
   );
