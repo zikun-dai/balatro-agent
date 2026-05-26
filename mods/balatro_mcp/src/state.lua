@@ -677,7 +677,10 @@ function state.snapshot()
   if G.jokers and G.jokers.cards then
     local jokers = {}
     for _, card in ipairs(G.jokers.cards) do
-      jokers[#jokers + 1] = serialize_joker(card)
+      local set = card and card.config and card.config.center and card.config.center.set
+      if set == nil or set == 'Joker' then
+        jokers[#jokers + 1] = serialize_joker(card)
+      end
     end
     if #jokers > 0 then payload.jokers = jokers end
   end

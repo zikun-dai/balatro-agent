@@ -8,8 +8,8 @@ import { BridgeError } from "../bridge/client.js";
 import { cardIdSchema, normalizeCardId, normalizeCardIds } from "./cardIds.js";
 
 const BUY_CARD_DESCRIPTION =
-  "Purchases a card from the shop and places it into the appropriate slot (Joker slot for Jokers, consumable slot for Tarot/Planet/Spectral cards, or voucher rack for Vouchers) without activating any consumable effect. " +
-  "Use this when you have enough dollars and an open slot for the card type, and you want to acquire the card for later use rather than triggering it immediately. " +
+  "Purchases a card from the shop. Jokers are placed into Joker slots, Tarot/Planet/Spectral cards are placed into consumable slots, and Vouchers are redeemed immediately as permanent run effects. " +
+  "Use this when you have enough dollars and an open slot for the card type, or when you want to redeem the shop Voucher. " +
   "Do NOT call this outside of the SHOP phase, on a card_id that is not currently in the shop, or when you lack the dollars or the slot capacity to receive it; use balatro_buy_and_use_card if your intent is to buy a consumable and immediately apply its effect. " +
   "Error codes: WRONG_PHASE (not in SHOP), INVALID_TARGET (card_id not present in current shop offerings), INSUFFICIENT_FUNDS (not enough dollars to purchase), NO_SLOT (no open slot for this card type), GAME_NOT_RUNNING (Balatro not running or heartbeat stale >5s), PROTOCOL_MISMATCH (server/mod version mismatch).";
 

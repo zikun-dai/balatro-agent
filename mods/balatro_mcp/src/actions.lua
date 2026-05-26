@@ -448,8 +448,13 @@ handlers.buy_card = function(args)
   end
 
   -- Voucher dependency check
+  local voucher_key = nil
   if shop_area == "voucher" and card.config and card.config.center then
     local center = card.config.center
+    if center.set ~= "Voucher" then
+      return err("INVALID_TARGET", "Card in voucher area is not a Voucher: " .. tostring(center.set))
+    end
+    voucher_key = center.key
     if center.requires and G.GAME and G.GAME.used_vouchers then
       -- Check each required voucher
       local reqs = type(center.requires) == "table" and center.requires or { center.requires }
@@ -461,12 +466,21 @@ handlers.buy_card = function(args)
     end
   end
 
-  -- Buy the card
-  if G.FUNCS and G.FUNCS.buy_from_shop then
+  -- Buy/redeem the card. Balatro vouchers use the redeem/use path, not the
+  -- normal buy path; buy_from_shop routes non-consumables into G.jokers.
+  if shop_area == "voucher" then
+    if not G.FUNCS or not G.FUNCS.use_card then
+      return err("INTERNAL_ERROR", "Balatro use_card callback is unavailable")
+    end
+    G.FUNCS.use_card({ config = { ref_table = card } })
+    if voucher_key and G.GAME and G.GAME.used_vouchers and not G.GAME.used_vouchers[voucher_key] then
+      return err("INTERNAL_ERROR", "Voucher was not redeemed: " .. tostring(voucher_key))
+    end
+  elseif G.FUNCS and G.FUNCS.buy_from_shop then
     G.FUNCS.buy_from_shop({ config = { ref_table = card } })
   end
 
-  return ok({ bought = card_id, cost = cost })
+  return ok({ bought = card_id, cost = cost, shop_area = shop_area, voucher_key = voucher_key })
 end
 
 ---------------------------------------------------------------------------
