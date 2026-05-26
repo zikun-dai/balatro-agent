@@ -1,29 +1,37 @@
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { BridgeClient } from "./bridge/client.js";
-import type { Deps, EntityCatalog, RulesService } from "./deps.js";
+import type { Deps } from "./deps.js";
+import { EntityCatalog } from "./entities/catalog.js";
+import { getRulesContent } from "./resources/rules.js";
 import { runServer } from "./server.js";
 
-const placeholderEntityCatalog: EntityCatalog = {
-  async list(): Promise<unknown> {
-    throw new Error("EntityCatalog not yet implemented");
-  },
-  async get(): Promise<unknown> {
-    throw new Error("EntityCatalog not yet implemented");
-  },
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-const placeholderRulesService: RulesService = {
-  async getGlobalRules(): Promise<{ markdown: string; source_url?: string }> {
-    throw new Error("RulesService not yet implemented");
-  },
-};
+const ENTITIES_DATA_DIR = resolve(__dirname, "../../data/entities");
 
 async function main(): Promise<void> {
   const bridgeClient = new BridgeClient();
+  await bridgeClient.connect();
+
+  const entityCatalog = new EntityCatalog(ENTITIES_DATA_DIR);
 
   const deps: Deps = {
     bridgeClient,
-    entityCatalog: placeholderEntityCatalog,
-    rulesService: placeholderRulesService,
+    entityCatalog: {
+      async list(options) {
+        return entityCatalog.listEntities(options);
+      },
+      async get(canonicalId) {
+        return entityCatalog.getEntity(canonicalId);
+      },
+    },
+    rulesService: {
+      async getGlobalRules() {
+        return { markdown: getRulesContent() };
+      },
+    },
   };
 
   await runServer({
