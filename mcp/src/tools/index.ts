@@ -8,6 +8,7 @@ import { registerCardActionTools } from "./cardActions.js";
 import { registerBuyTools } from "./buy.js";
 import { registerShopFlowTools } from "./shopFlow.js";
 import { registerBoosterTools } from "./booster.js";
+import { registerReorderJokersTool } from "./reorderJokers.js";
 
 export function registerAllTools(server: McpServer, deps: Deps): void {
   registerInspectGameState(server, deps);
@@ -18,4 +19,5 @@ export function registerAllTools(server: McpServer, deps: Deps): void {
   registerBuyTools(server, deps);
   registerShopFlowTools(server, deps);
   registerBoosterTools(server, deps);
+  registerReorderJokersTool(server, deps);
 }
