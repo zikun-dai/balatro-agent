@@ -96,6 +96,24 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+function seqFromFilename(name: string): number | undefined {
+  const match = /^(\d+)\.json$/.exec(name);
+  if (!match) return undefined;
+  return Number(match[1]);
+}
+
+async function maxSeqInDir(path: string): Promise<number> {
+  try {
+    const entries = await fs.readdir(path);
+    return entries.reduce((max, entry) => {
+      const seq = seqFromFilename(entry);
+      return seq === undefined ? max : Math.max(max, seq);
+    }, 0);
+  } catch {
+    return 0;
+  }
+}
+
 async function isProcessAlive(pid: number): Promise<boolean> {
   try {
     process.kill(pid, 0);
@@ -153,7 +171,9 @@ export class BridgeClient {
     await fs.rename(tmpPath, lockPath);
 
     this.connected = true;
-    this.commandSeq = 0;
+    const commandsSeq = await maxSeqInDir(join(this.bridgeDir, "commands"));
+    const responsesSeq = await maxSeqInDir(join(this.bridgeDir, "responses"));
+    this.commandSeq = Math.max(commandsSeq, responsesSeq);
   }
 
   /**
@@ -275,6 +295,10 @@ export class BridgeClient {
       try {
         const raw = await fs.readFile(responsePath, "utf-8");
         const response: ResponseEnvelope = JSON.parse(raw);
+        if (response.seq !== seq) {
+          await sleep(RESPONSE_POLL_INTERVAL_MS);
+          continue;
+        }
         return response;
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code;
