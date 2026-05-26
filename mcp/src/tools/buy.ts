@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
+import { cardIdSchema, normalizeCardId, normalizeCardIds } from "./cardIds.js";
 
 const BUY_CARD_DESCRIPTION =
   "Purchases a card from the shop and places it into the appropriate slot (Joker slot for Jokers, consumable slot for Tarot/Planet/Spectral cards, or voucher rack for Vouchers) without activating any consumable effect. " +
@@ -21,7 +22,7 @@ const BUY_AND_USE_CARD_DESCRIPTION =
 const buyCardSchema = z
   .object({
     card_id: z
-      .string()
+      .union([z.string(), z.number().int()])
       .describe("The ID of the card in the shop to purchase. Must reference a card currently offered in the SHOP phase."),
     response_format: z
       .enum(["markdown", "json"])
@@ -33,10 +34,10 @@ const buyCardSchema = z
 const buyAndUseCardSchema = z
   .object({
     card_id: z
-      .string()
+      .union([z.string(), z.number().int()])
       .describe("The ID of the consumable card in the shop to purchase and immediately use. Must be a Tarot, Planet, or Spectral card currently offered in the SHOP phase."),
     targets: z
-      .array(z.string())
+      .array(cardIdSchema)
       .optional()
       .describe("Optional array of target card IDs for consumables that operate on specific cards (e.g. Tarots that enhance hand cards). Omit for consumables that take no targets."),
     response_format: z
@@ -111,9 +112,10 @@ export function registerBuyTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
+      const cardId = normalizeCardId(args.card_id);
       const envelope = await executeBuyCommand(
         deps,
-        { kind: "buy_card", card_id: args.card_id },
+        { kind: "buy_card", card_id: cardId },
         format,
       );
       return { ...envelope };
@@ -129,9 +131,11 @@ export function registerBuyTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
+      const cardId = normalizeCardId(args.card_id);
+      const targets = args.targets ? normalizeCardIds(args.targets) : undefined;
       const envelope = await executeBuyCommand(
         deps,
-        { kind: "buy_and_use_card", card_id: args.card_id, targets: args.targets },
+        { kind: "buy_and_use_card", card_id: cardId, targets },
         format,
       );
       return { ...envelope };

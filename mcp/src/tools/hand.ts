@@ -5,6 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
+import { cardIdSchema, normalizeCardIds } from "./cardIds.js";
 
 const SELECT_HAND_CARDS_DESCRIPTION =
   "Highlights (selects) specific cards in the player's hand for a subsequent play or discard action, using replace-mode semantics so each call replaces any previously selected cards entirely with the new set. " +
@@ -21,7 +22,7 @@ const SORT_HAND_DESCRIPTION =
 const selectHandCardsSchema = z
   .object({
     card_ids: z
-      .array(z.string())
+      .array(cardIdSchema)
       .min(0)
       .max(50)
       .describe(
@@ -37,7 +38,7 @@ const selectHandCardsSchema = z
 const sortHandSchema = z
   .object({
     order: z
-      .array(z.string())
+      .array(cardIdSchema)
       .min(0)
       .max(50)
       .describe(
@@ -108,9 +109,10 @@ export function registerHandTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
+      const cardIds = normalizeCardIds(args.card_ids);
       const envelope = await executeHandCommand(
         deps,
-        { kind: "select_hand_cards", card_ids: args.card_ids },
+        { kind: "select_hand_cards", card_ids: cardIds },
         format,
       );
       return { ...envelope };
@@ -126,9 +128,10 @@ export function registerHandTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
+      const order = normalizeCardIds(args.order);
       const envelope = await executeHandCommand(
         deps,
-        { kind: "sort_hand", order: args.order },
+        { kind: "sort_hand", order },
         format,
       );
       return { ...envelope };
