@@ -27,6 +27,32 @@ const inputSchema = z
   })
   .strict();
 
+function playHandToMarkdown(data: object): string {
+  const d = data as Record<string, unknown>;
+  const result = (d.data ?? {}) as Record<string, unknown>;
+  const lines: string[] = [];
+
+  lines.push("# Hand Played");
+  lines.push("");
+  lines.push(`- **Cards played:** ${String(result.cards_played ?? "unknown")}`);
+  if (result.points_gained !== undefined) lines.push(`- **Points gained:** ${String(result.points_gained)}`);
+  if (result.score_before !== undefined && result.score_after !== undefined) {
+    lines.push(`- **Score:** ${String(result.score_before)} -> ${String(result.score_after)}`);
+  }
+  if (result.blind_chips !== undefined) lines.push(`- **Blind target:** ${String(result.blind_chips)}`);
+  if (result.blind_defeated !== undefined) {
+    lines.push(`- **Blind defeated:** ${String(result.blind_defeated)}`);
+  }
+  if (result.hands_played_before !== undefined && result.hands_played_after !== undefined) {
+    lines.push(`- **Hands played:** ${String(result.hands_played_before)} -> ${String(result.hands_played_after)}`);
+  }
+  if (result.timed_out) {
+    lines.push("- **Warning:** Scoring wait timed out; score fields reflect the latest observed game state.");
+  }
+
+  return lines.join("\n");
+}
+
 const ANNOTATIONS = {
   readOnlyHint: false,
   destructiveHint: true,
@@ -42,7 +68,9 @@ async function executePlayDiscardCommand(
   let response;
   try {
     const seq = await deps.bridgeClient.sendCommand({ kind });
-    response = await deps.bridgeClient.awaitResponse(seq);
+    response = await deps.bridgeClient.awaitResponse(seq, {
+      timeoutMs: kind === "play_hand" ? 15_000 : undefined,
+    });
   } catch (err) {
     if (err instanceof BridgeError) {
       return toolError(err.code, err.message);
@@ -66,7 +94,7 @@ async function executePlayDiscardCommand(
     data: response.data,
   };
 
-  return formatResponse(structured, format);
+  return formatResponse(structured, format, kind === "play_hand" ? { toMarkdown: playHandToMarkdown } : undefined);
 }
 
 export function registerPlayDiscardTools(server: McpServer, deps: Deps): void {
