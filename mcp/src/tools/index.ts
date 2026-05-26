@@ -7,6 +7,7 @@ import { registerPlayDiscardTools } from "./playDiscard.js";
 import { registerCardActionTools } from "./cardActions.js";
 import { registerBuyTools } from "./buy.js";
 import { registerShopFlowTools } from "./shopFlow.js";
+import { registerBoosterTools } from "./booster.js";
 
 export function registerAllTools(server: McpServer, deps: Deps): void {
   registerInspectGameState(server, deps);
@@ -16,4 +17,5 @@ export function registerAllTools(server: McpServer, deps: Deps): void {
   registerCardActionTools(server, deps);
   registerBuyTools(server, deps);
   registerShopFlowTools(server, deps);
+  registerBoosterTools(server, deps);
 }
