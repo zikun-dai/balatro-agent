@@ -1,0 +1,18 @@
+{
+  "id": "balatro_mcp",
+  "name": "Balatro MCP",
+  "author": [
+    "4rcadia"
+  ],
+  "description": "File bridge for controlling Balatro through an MCP server.",
+  "prefix": "BMCP",
+  "main_file": "main.lua",
+  "priority": 0,
+  "badge_colour": "111827",
+  "badge_text_colour": "FFFFFF",
+  "display_name": "MCP",
+  "version": "0.1.0",
+  "dependencies": [
+    "Steamodded (>=1.~)"
+  ]
+}

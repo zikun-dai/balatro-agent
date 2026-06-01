@@ -5,7 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
-import { cardIdSchema, normalizeCardIds } from "./cardIds.js";
+import { cardIdSchema, normalizeCardIds, type CardId } from "./cardIds.js";
 
 const REORDER_JOKERS_DESCRIPTION =
   "Reorders the Jokers in the player's Joker area to the explicit left-to-right order specified by an array of Joker card IDs, where the first ID becomes the leftmost Joker and the last ID becomes the rightmost. " +
@@ -38,7 +38,7 @@ const REORDER_JOKERS_ANNOTATIONS = {
 
 async function executeReorderJokersCommand(
   deps: Deps,
-  order: string[],
+  order: CardId[],
   format: ResponseFormat,
 ) {
   let response;

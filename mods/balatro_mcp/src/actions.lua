@@ -8,8 +8,8 @@ local Actions = {}
 local handlers = {}
 
 --- Phase constants (resolved lazily from G.STATES)
-local function S(name)
-  return G and G.STATES and G.STATES[name]
+local function S(name, fallback)
+  return (G and G.STATES and G.STATES[name]) or fallback
 end
 
 ---------------------------------------------------------------------------
@@ -17,11 +17,17 @@ end
 ---------------------------------------------------------------------------
 
 local function err(error_code, message)
-  return { ok = false, error_code = error_code, message = message }
+  return { ok = false, error_code = error_code, error_message = message, message = message }
 end
 
 local function ok(data)
   return { ok = true, data = data or {} }
+end
+
+local function mark_busy(seconds)
+  if not (love and love.timer and love.timer.getTime) then return end
+  local until_time = love.timer.getTime() + seconds
+  _G.BALATRO_MCP_BUSY_UNTIL = math.max(_G.BALATRO_MCP_BUSY_UNTIL or 0, until_time)
 end
 
 ---------------------------------------------------------------------------
@@ -44,11 +50,17 @@ end
 -- Card resolution helpers
 ---------------------------------------------------------------------------
 
+local function card_id_key(card_id)
+  if card_id == nil then return nil end
+  return tostring(card_id)
+end
+
 local function find_card_in(area, card_id)
   if not area or not area.cards then return nil end
+  local wanted = card_id_key(card_id)
   for _, card in ipairs(area.cards) do
     local cid = card.sort_id or (card.config and card.config.card_id)
-    if cid == card_id then
+    if cid == card_id or card_id_key(cid) == wanted then
       return card
     end
   end
@@ -122,6 +134,150 @@ local function is_pack_state()
   return false
 end
 
+local DECK_ENUM_TO_NAME = {
+  RED = "Red Deck",
+  BLUE = "Blue Deck",
+  YELLOW = "Yellow Deck",
+  GREEN = "Green Deck",
+  BLACK = "Black Deck",
+  MAGIC = "Magic Deck",
+  NEBULA = "Nebula Deck",
+  GHOST = "Ghost Deck",
+  ABANDONED = "Abandoned Deck",
+  CHECKERED = "Checkered Deck",
+  ZODIAC = "Zodiac Deck",
+  PAINTED = "Painted Deck",
+  ANAGLYPH = "Anaglyph Deck",
+  PLASMA = "Plasma Deck",
+  ERRATIC = "Erratic Deck",
+}
+
+local STAKE_ENUM_TO_NUMBER = {
+  WHITE = 1,
+  RED = 2,
+  GREEN = 3,
+  BLACK = 4,
+  BLUE = 5,
+  PURPLE = 6,
+  ORANGE = 7,
+  GOLD = 8,
+}
+
+local function normalize_blind_slot(slot)
+  if slot == nil or slot == "" or slot == "current" then
+    slot = G and G.GAME and G.GAME.blind_on_deck
+  end
+  if type(slot) ~= "string" then return nil end
+  slot = string.lower(slot)
+  if slot == "small" or slot == "big" or slot == "boss" then return slot end
+  return nil
+end
+
+local function get_blind_key(slot)
+  return slot == "small" and "Small" or slot == "big" and "Big" or "Boss"
+end
+
+local function get_target_card_ids(args)
+  if args.target_card_ids and type(args.target_card_ids) == "table" then
+    return args.target_card_ids
+  end
+  if args.targets and type(args.targets) == "table" then
+    return args.targets
+  end
+  return nil
+end
+
+local function highlight_target_cards(target_card_ids)
+  if not target_card_ids or #target_card_ids == 0 then return nil end
+  if G.hand and G.hand.unhighlight_all then
+    G.hand:unhighlight_all()
+  end
+  for _, tid in ipairs(target_card_ids) do
+    local target = find_card_in_hand(tid)
+    if not target then
+      return err("INVALID_TARGET", "Target card not found in hand: " .. tostring(tid))
+    end
+    if G.hand and G.hand.add_to_highlighted then
+      G.hand:add_to_highlighted(target)
+    end
+  end
+  return nil
+end
+
+---------------------------------------------------------------------------
+-- ACTION: start_run
+---------------------------------------------------------------------------
+
+handlers.start_run = function(args)
+  local phase_err = check_phase({ S("MENU", 1) })
+  if phase_err then return phase_err end
+
+  local deck = args.deck or "RED"
+  local stake = args.stake or "WHITE"
+  local deck_name = DECK_ENUM_TO_NAME[deck]
+  local stake_number = STAKE_ENUM_TO_NUMBER[stake]
+
+  if not deck_name then
+    return err("INVALID_TARGET", "Invalid deck: " .. tostring(deck))
+  end
+  if not stake_number then
+    return err("INVALID_TARGET", "Invalid stake: " .. tostring(stake))
+  end
+  if not G.FUNCS or not G.FUNCS.setup_run or not G.FUNCS.start_run then
+    return err("WRONG_PHASE", "Run setup functions are not available")
+  end
+
+  G.FUNCS.setup_run({ config = {} })
+  if G.FUNCS.exit_overlay_menu then
+    G.FUNCS.exit_overlay_menu()
+  end
+
+  local deck_found = false
+  if G.P_CENTER_POOLS and G.P_CENTER_POOLS.Back then
+    for _, deck_data in pairs(G.P_CENTER_POOLS.Back) do
+      if deck_data.name == deck_name then
+        if G.GAME and G.GAME.selected_back and G.GAME.selected_back.change_to then
+          G.GAME.selected_back:change_to(deck_data)
+        end
+        if G.GAME and G.GAME.viewed_back and G.GAME.viewed_back.change_to then
+          G.GAME.viewed_back:change_to(deck_data)
+        end
+        deck_found = true
+        break
+      end
+    end
+  end
+
+  if not deck_found then
+    return err("INVALID_TARGET", "Deck not found: " .. deck_name)
+  end
+
+  local run_params = { stake = stake_number }
+  if args.seed and args.seed ~= "" then
+    run_params.seed = args.seed
+  end
+
+  G.FUNCS.start_run(nil, run_params)
+  return ok({ deck = deck, stake = stake, seed = args.seed })
+end
+
+---------------------------------------------------------------------------
+-- ACTION: return_to_menu
+---------------------------------------------------------------------------
+
+handlers.return_to_menu = function(args)
+  if G and G.STATE == S("MENU", 1) then
+    return ok({ already_menu = true })
+  end
+
+  if G.FUNCS and G.FUNCS.go_to_menu then
+    G.FUNCS.go_to_menu({})
+    return ok({ returning_to_menu = true })
+  end
+
+  return err("WRONG_PHASE", "go_to_menu is not available")
+end
+
 ---------------------------------------------------------------------------
 -- ACTION: select_blind
 ---------------------------------------------------------------------------
@@ -130,8 +286,8 @@ handlers.select_blind = function(args)
   local phase_err = check_phase({ S("BLIND_SELECT") })
   if phase_err then return phase_err end
 
-  local slot = args.slot
-  if not slot or (slot ~= "small" and slot ~= "big" and slot ~= "boss") then
+  local slot = normalize_blind_slot(args.slot)
+  if not slot then
     return err("INVALID_TARGET", "Invalid blind slot: " .. tostring(slot))
   end
 
@@ -140,14 +296,16 @@ handlers.select_blind = function(args)
     return err("INVALID_TARGET", "No blind choices available")
   end
 
-  local blind_key = slot == "small" and "Small" or slot == "big" and "Big" or "Boss"
+  local blind_key = get_blind_key(slot)
   if not G.GAME.round_resets.blind_choices[blind_key] then
     return err("INVALID_TARGET", "Blind slot '" .. slot .. "' not available in current choices")
   end
 
-  -- Call G.FUNCS.select_blind
   if G.FUNCS and G.FUNCS.select_blind then
-    G.FUNCS.select_blind({ config = { id = slot } })
+    local blind_pane = G.blind_select_opts and G.blind_select_opts[slot]
+    local select_button = blind_pane and blind_pane.get_UIE_by_ID and blind_pane:get_UIE_by_ID("select_blind_button")
+    G.FUNCS.select_blind(select_button or { config = { id = slot } })
+    mark_busy(1.0)
   end
 
   return ok({ blind_selected = slot })
@@ -161,20 +319,24 @@ handlers.skip_blind = function(args)
   local phase_err = check_phase({ S("BLIND_SELECT") })
   if phase_err then return phase_err end
 
-  -- Boss blind cannot be skipped
-  if G.GAME and G.GAME.blind and G.GAME.blind.boss then
-    -- Check if this is the final ante in non-endless mode
-    if G.GAME.round_resets and G.GAME.round_resets.ante and G.GAME.round_resets.ante >= 8
-        and not (G.GAME.round_resets.ante > 8) then
-      -- Only block if it's actually the boss blind being presented
-    end
+  local slot = normalize_blind_slot(args.slot)
+  if not slot then
+    return err("INVALID_TARGET", "Invalid blind slot: " .. tostring(args.slot))
+  end
+  if slot == "boss" then
+    return err("INVALID_TARGET", "Boss blind cannot be skipped")
   end
 
   if G.FUNCS and G.FUNCS.skip_blind then
-    G.FUNCS.skip_blind()
+    local blind_key = get_blind_key(slot)
+    local blind_pane = G.blind_select_opts and G.blind_select_opts[slot]
+    local tag_element = blind_pane and blind_pane.get_UIE_by_ID and blind_pane:get_UIE_by_ID("tag_" .. blind_key)
+    local skip_button = tag_element and tag_element.children and tag_element.children[2]
+    G.FUNCS.skip_blind(skip_button)
+    mark_busy(1.0)
   end
 
-  return ok({ skipped = true })
+  return ok({ skipped = true, blind_skipped = slot })
 end
 
 ---------------------------------------------------------------------------
@@ -237,6 +399,42 @@ handlers.sort_hand = function(args)
   local phase_err = check_phase({ S("SELECTING_HAND") })
   if phase_err then return phase_err end
 
+  if args.order and type(args.order) == "table" then
+    if not G.hand or not G.hand.cards then
+      return err("INVALID_TARGET", "No hand cards to sort")
+    end
+    if #args.order ~= #G.hand.cards then
+      return err("INVALID_TARGET", "order count (" .. #args.order .. ") does not match hand count (" .. #G.hand.cards .. ")")
+    end
+
+    local id_to_card = {}
+    for _, card in ipairs(G.hand.cards) do
+      local cid = card.sort_id or (card.config and card.config.card_id)
+      id_to_card[card_id_key(cid)] = card
+    end
+
+    local seen = {}
+    local new_order = {}
+    for _, cid in ipairs(args.order) do
+      local key = card_id_key(cid)
+      local card = id_to_card[key]
+      if not card then
+        return err("INVALID_TARGET", "Card not found in hand: " .. tostring(cid))
+      end
+      if seen[key] then
+        return err("INVALID_TARGET", "Duplicate card ID in order: " .. tostring(cid))
+      end
+      seen[key] = true
+      new_order[#new_order + 1] = card
+    end
+
+    G.hand.cards = new_order
+    if G.hand.set_ranks then
+      G.hand:set_ranks()
+    end
+    return ok({ sorted_by = "order", count = #new_order })
+  end
+
   local by = args.by
   if by ~= "rank" and by ~= "suit" then
     return err("INVALID_TARGET", "Sort criterion must be 'rank' or 'suit', got: " .. tostring(by))
@@ -284,6 +482,7 @@ handlers.play_hand = function(args)
 
   if G.FUNCS and G.FUNCS.play_cards_from_highlighted then
     G.FUNCS.play_cards_from_highlighted()
+    mark_busy(2.0)
   end
 
   return ok({ cards_played = #G.hand.highlighted })
@@ -313,6 +512,7 @@ handlers.discard_hand = function(args)
 
   if G.FUNCS and G.FUNCS.discard_cards_from_highlighted then
     G.FUNCS.discard_cards_from_highlighted()
+    mark_busy(1.0)
   end
 
   return ok({ cards_discarded = #G.hand.highlighted })
@@ -336,32 +536,18 @@ handlers.use_consumable = function(args)
     return err("INVALID_TARGET", "Consumable not found: " .. tostring(card_id))
   end
 
-  -- Check can_use_consumeable
-  if card.can_use_consumeable and not card:can_use_consumeable() then
-    return err("INVALID_TARGET", "Consumable cannot be used in current context")
-  end
+  local target_err = highlight_target_cards(get_target_card_ids(args))
+  if target_err then return target_err end
 
-  -- If target_card_ids provided, highlight those cards first
-  if args.target_card_ids and type(args.target_card_ids) == "table" and #args.target_card_ids > 0 then
-    -- Unhighlight all first
-    if G.hand and G.hand.unhighlight_all then
-      G.hand:unhighlight_all()
-    end
-    -- Highlight targets
-    for _, tid in ipairs(args.target_card_ids) do
-      local target = find_card_in_hand(tid)
-      if not target then
-        return err("INVALID_TARGET", "Target card not found in hand: " .. tostring(tid))
-      end
-      if G.hand and G.hand.add_to_highlighted then
-        G.hand:add_to_highlighted(target)
-      end
-    end
+  -- Check can_use_consumeable after applying target highlights.
+  if card.can_use_consumeable and not card:can_use_consumeable() then
+    return err("INVALID_TARGET", "Consumable cannot be used in current context; target cards may be required")
   end
 
   -- Use the consumable
   if G.FUNCS and G.FUNCS.use_card then
     G.FUNCS.use_card({ config = { ref_table = card } })
+    mark_busy(1.0)
   end
 
   return ok({ used = card_id })
@@ -397,6 +583,7 @@ handlers.sell_card = function(args)
   -- Sell the card
   if G.FUNCS and G.FUNCS.sell_card then
     G.FUNCS.sell_card({ config = { ref_table = card } })
+    mark_busy(0.4)
   end
 
   return ok({ sold = card_id, sell_value = card.sell_cost })
@@ -473,11 +660,13 @@ handlers.buy_card = function(args)
       return err("INTERNAL_ERROR", "Balatro use_card callback is unavailable")
     end
     G.FUNCS.use_card({ config = { ref_table = card } })
+    mark_busy(0.7)
     if voucher_key and G.GAME and G.GAME.used_vouchers and not G.GAME.used_vouchers[voucher_key] then
       return err("INTERNAL_ERROR", "Voucher was not redeemed: " .. tostring(voucher_key))
     end
   elseif G.FUNCS and G.FUNCS.buy_from_shop then
     G.FUNCS.buy_from_shop({ config = { ref_table = card } })
+    mark_busy(0.5)
   end
 
   return ok({ bought = card_id, cost = cost, shop_area = shop_area, voucher_key = voucher_key })
@@ -516,35 +705,20 @@ handlers.buy_and_use_card = function(args)
     return err("INSUFFICIENT_FUNDS", "Cannot afford card (cost=" .. tostring(cost) .. ", available=" .. tostring(available_funds()) .. ")")
   end
 
-  -- Check can_use
+  local target_err = highlight_target_cards(get_target_card_ids(args))
+  if target_err then return target_err end
+
+  -- Check can_use after applying target highlights.
   if card.can_use_consumeable and not card:can_use_consumeable() then
-    return err("INVALID_TARGET", "Consumable cannot be used in current context")
+    return err("INVALID_TARGET", "Consumable cannot be used in current context; target cards may be required")
   end
 
-  -- If target_card_ids provided, highlight those cards first
-  if args.target_card_ids and type(args.target_card_ids) == "table" and #args.target_card_ids > 0 then
-    if G.hand and G.hand.unhighlight_all then
-      G.hand:unhighlight_all()
-    end
-    for _, tid in ipairs(args.target_card_ids) do
-      local target = find_card_in_hand(tid)
-      if not target then
-        return err("INVALID_TARGET", "Target card not found in hand: " .. tostring(tid))
-      end
-      if G.hand and G.hand.add_to_highlighted then
-        G.hand:add_to_highlighted(target)
-      end
-    end
-  end
-
-  -- Buy from shop (this deducts cost)
+  -- Let Balatro's native buy-and-use path run use_card after the delayed
+  -- purchase event removes the card from its shop area. Calling use_card
+  -- immediately here races that event and can leave c1.area nil.
   if G.FUNCS and G.FUNCS.buy_from_shop then
-    G.FUNCS.buy_from_shop({ config = { ref_table = card } })
-  end
-
-  -- Immediately use it
-  if G.FUNCS and G.FUNCS.use_card then
-    G.FUNCS.use_card({ config = { ref_table = card } })
+    G.FUNCS.buy_from_shop({ config = { ref_table = card, id = "buy_and_use" } })
+    mark_busy(1.0)
   end
 
   return ok({ bought_and_used = card_id, cost = cost })
@@ -576,6 +750,7 @@ handlers.reroll_shop = function(args)
 
   if G.FUNCS and G.FUNCS.reroll_shop then
     G.FUNCS.reroll_shop()
+    mark_busy(0.5)
   end
 
   return ok({ rerolled = true })
@@ -591,6 +766,7 @@ handlers.leave_shop = function(args)
 
   if G.FUNCS and G.FUNCS.toggle_shop then
     G.FUNCS.toggle_shop()
+    mark_busy(1.0)
   end
 
   return ok({ left_shop = true })
@@ -604,8 +780,15 @@ handlers.cash_out = function(args)
   local phase_err = check_phase({ S("ROUND_EVAL") })
   if phase_err then return phase_err end
 
+  if G.GAME and G.GAME.won and G.OVERLAY_MENU and G.FUNCS and G.FUNCS.exit_overlay_menu then
+    G.FUNCS.exit_overlay_menu()
+    mark_busy(1.0)
+    return ok({ continued_endless = true })
+  end
+
   if G.FUNCS and G.FUNCS.cash_out then
-    G.FUNCS.cash_out()
+    G.FUNCS.cash_out({ config = {} })
+    mark_busy(1.0)
   end
 
   return ok({ cashed_out = true })
@@ -637,7 +820,10 @@ handlers.open_booster = function(args)
 
   -- Open the booster (buy + open)
   if G.FUNCS and G.FUNCS.use_card then
+    local target_err = highlight_target_cards(get_target_card_ids(args))
+    if target_err then return target_err end
     G.FUNCS.use_card({ config = { ref_table = card } })
+    mark_busy(2.0)
   end
 
   return ok({ opened = card_id })
@@ -687,9 +873,17 @@ handlers.select_booster_card = function(args)
     end
   end
 
+  local target_err = highlight_target_cards(get_target_card_ids(args))
+  if target_err then return target_err end
+
+  if card.can_use_consumeable and not card:can_use_consumeable() then
+    return err("INVALID_TARGET", "Pack card cannot be selected in current context; target cards may be required")
+  end
+
   -- Select the card from the pack
   if G.FUNCS and G.FUNCS.use_card then
     G.FUNCS.use_card({ config = { ref_table = card } })
+    mark_busy(1.0)
   end
 
   return ok({ selected = card_id })
@@ -706,6 +900,7 @@ handlers.skip_booster = function(args)
 
   if G.FUNCS and G.FUNCS.skip_booster then
     G.FUNCS.skip_booster()
+    mark_busy(1.0)
   end
 
   return ok({ skipped_booster = true })
@@ -739,26 +934,28 @@ handlers.reorder_jokers = function(args)
   local id_to_card = {}
   for _, card in ipairs(G.jokers.cards) do
     local cid = card.sort_id or (card.config and card.config.card_id)
-    current_ids[cid] = true
-    id_to_card[cid] = card
+    local key = card_id_key(cid)
+    current_ids[key] = true
+    id_to_card[key] = card
   end
 
   -- Validate all provided IDs exist and are unique
   local seen = {}
   for _, cid in ipairs(card_ids) do
-    if not current_ids[cid] then
+    local key = card_id_key(cid)
+    if not current_ids[key] then
       return err("INVALID_TARGET", "Joker ID not found: " .. tostring(cid))
     end
-    if seen[cid] then
+    if seen[key] then
       return err("INVALID_TARGET", "Duplicate joker ID in reorder: " .. tostring(cid))
     end
-    seen[cid] = true
+    seen[key] = true
   end
 
   -- Reorder: rebuild G.jokers.cards in the requested order
   local new_order = {}
   for _, cid in ipairs(card_ids) do
-    new_order[#new_order + 1] = id_to_card[cid]
+    new_order[#new_order + 1] = id_to_card[card_id_key(cid)]
   end
   G.jokers.cards = new_order
 

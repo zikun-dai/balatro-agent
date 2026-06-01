@@ -5,7 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
-import { cardIdSchema, normalizeCardId, normalizeCardIds } from "./cardIds.js";
+import { cardIdSchema, normalizeCardId, normalizeCardIds, type CardId } from "./cardIds.js";
 
 const BUY_CARD_DESCRIPTION =
   "Purchases a card from the shop. Jokers are placed into Joker slots, Tarot/Planet/Spectral cards are placed into consumable slots, and Vouchers are redeemed immediately as permanent run effects. " +
@@ -64,8 +64,8 @@ const BUY_AND_USE_CARD_ANNOTATIONS = {
 async function executeBuyCommand(
   deps: Deps,
   command:
-    | { kind: "buy_card"; card_id: string }
-    | { kind: "buy_and_use_card"; card_id: string; targets?: string[] },
+    | { kind: "buy_card"; card_id: CardId }
+    | { kind: "buy_and_use_card"; card_id: CardId; targets?: CardId[] },
   format: ResponseFormat,
 ) {
   let response;
@@ -73,7 +73,7 @@ async function executeBuyCommand(
     const args: Record<string, unknown> =
       command.kind === "buy_card"
         ? { card_id: command.card_id }
-        : { card_id: command.card_id, targets: command.targets };
+        : { card_id: command.card_id, target_card_ids: command.targets };
     const seq = await deps.bridgeClient.sendCommand({ kind: command.kind, args });
     response = await deps.bridgeClient.awaitResponse(seq);
   } catch (err) {

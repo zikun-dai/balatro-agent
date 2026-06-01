@@ -53,6 +53,8 @@ local function atomic_write(abs_path, content)
   end
   f:write(content)
   f:close()
+
+  os.remove(abs_path)
   local ok, rename_err = os.rename(tmp_path, abs_path)
   if not ok then
     return false, "Failed to rename: " .. tostring(rename_err)
@@ -88,12 +90,16 @@ local function move_file(src, dest)
 end
 
 ---------------------------------------------------------------------------
--- Utility: ensure directory exists (using os-level mkdir)
+-- Utility: ensure directory exists under love.filesystem save dir
 ---------------------------------------------------------------------------
-local function ensure_dir(abs_path)
-  -- Use love.filesystem for relative paths where possible,
-  -- fall back to os.execute for absolute paths
-  os.execute('mkdir -p "' .. abs_path .. '"')
+local function ensure_dir(rel_path)
+  local normalized = rel_path:gsub("/$", "")
+  local current = ""
+
+  for part in normalized:gmatch("[^/]+") do
+    current = current == "" and part or (current .. "/" .. part)
+    love.filesystem.createDirectory(current)
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -101,17 +107,16 @@ end
 ---------------------------------------------------------------------------
 local function list_command_files()
   local files = {}
-  local handle = io.popen('ls -1 "' .. commands_abs .. '" 2>/dev/null')
-  if not handle then
+  local ok, items = pcall(love.filesystem.getDirectoryItems, COMMANDS_REL)
+  if not ok or type(items) ~= "table" then
     return files
   end
-  for line in handle:lines() do
+  for _, line in ipairs(items) do
     -- Only include .json files, skip .tmp and subdirectories
     if line:match("^%d+%.json$") then
       files[#files + 1] = line
     end
   end
-  handle:close()
   table.sort(files)
   return files
 end
@@ -424,11 +429,11 @@ function Commands.init()
   get_bridge_abs()
 
   -- Ensure all required directories exist
-  ensure_dir(bridge_abs)
-  ensure_dir(commands_abs)
-  ensure_dir(commands_abs .. "invalid/")
-  ensure_dir(commands_abs .. "failed/")
-  ensure_dir(responses_abs)
+  ensure_dir(BRIDGE_REL)
+  ensure_dir(COMMANDS_REL)
+  ensure_dir(COMMANDS_REL .. "invalid/")
+  ensure_dir(COMMANDS_REL .. "failed/")
+  ensure_dir(RESPONSES_REL)
 
   -- Calibrate time offset: difference between os.time (unix epoch) and love.timer.getTime()
   time_offset = os.time() - love.timer.getTime()
@@ -467,6 +472,10 @@ function Commands.update(dt)
     end
   end
 
+  if _G.BALATRO_MCP_BUSY_UNTIL and love.timer.getTime() < _G.BALATRO_MCP_BUSY_UNTIL then
+    return
+  end
+
   -- Poll commands directory
   local ok_poll, files_or_err = pcall(list_command_files)
   if not ok_poll then
@@ -487,6 +496,9 @@ function Commands.update(dt)
     local ok_proc, proc_err = pcall(process_command, filename)
     if not ok_proc then
       sendDebugMessage("MCP: Error processing command " .. filename .. ": " .. tostring(proc_err), "balatro_mcp")
+    end
+    if _G.BALATRO_MCP_BUSY_UNTIL and love.timer.getTime() < _G.BALATRO_MCP_BUSY_UNTIL then
+      break
     end
   end
 end

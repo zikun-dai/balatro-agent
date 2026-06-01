@@ -20,6 +20,10 @@ const SKIP_BLIND_DESCRIPTION =
 
 const inputSchema = z
   .object({
+    slot: z
+      .enum(["current", "small", "big", "boss"])
+      .default("current")
+      .describe("Blind slot to act on. Use 'current' for the blind currently on deck."),
     response_format: z
       .enum(["markdown", "json"])
       .default("markdown")
@@ -37,11 +41,12 @@ const ANNOTATIONS = {
 async function executeBlindCommand(
   deps: Deps,
   kind: "select_blind" | "skip_blind",
+  slot: "current" | "small" | "big" | "boss",
   format: ResponseFormat,
 ) {
   let response;
   try {
-    const seq = await deps.bridgeClient.sendCommand({ kind });
+    const seq = await deps.bridgeClient.sendCommand({ kind, args: { slot } });
     response = await deps.bridgeClient.awaitResponse(seq);
   } catch (err) {
     if (err instanceof BridgeError) {
@@ -79,7 +84,8 @@ export function registerBlindTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
-      const envelope = await executeBlindCommand(deps, "select_blind", format);
+      const slot = args.slot ?? "current";
+      const envelope = await executeBlindCommand(deps, "select_blind", slot, format);
       return { ...envelope };
     },
   );
@@ -93,7 +99,8 @@ export function registerBlindTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
-      const envelope = await executeBlindCommand(deps, "skip_blind", format);
+      const slot = args.slot ?? "current";
+      const envelope = await executeBlindCommand(deps, "skip_blind", slot, format);
       return { ...envelope };
     },
   );

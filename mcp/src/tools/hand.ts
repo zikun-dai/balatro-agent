@@ -5,7 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
-import { cardIdSchema, normalizeCardIds } from "./cardIds.js";
+import { cardIdSchema, normalizeCardIds, type CardId } from "./cardIds.js";
 
 const SELECT_HAND_CARDS_DESCRIPTION =
   "Highlights (selects) specific cards in the player's hand for a subsequent play or discard action, using replace-mode semantics so each call replaces any previously selected cards entirely with the new set. " +
@@ -60,7 +60,7 @@ const ANNOTATIONS = {
 
 async function executeHandCommand(
   deps: Deps,
-  command: { kind: "select_hand_cards"; card_ids: string[] } | { kind: "sort_hand"; order: string[] },
+  command: { kind: "select_hand_cards"; card_ids: CardId[] } | { kind: "sort_hand"; order: CardId[] },
   format: ResponseFormat,
 ) {
   let response;

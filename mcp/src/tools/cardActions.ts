@@ -5,7 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
-import { normalizeCardId } from "./cardIds.js";
+import { cardIdSchema, normalizeCardId, normalizeCardIds, type CardId } from "./cardIds.js";
 
 const USE_CONSUMABLE_DESCRIPTION =
   "Uses a consumable card (Tarot, Planet, or Spectral) from your consumable slots, applying its effect to the game state immediately. " +
@@ -24,6 +24,10 @@ const useConsumableSchema = z
     card_id: z
       .union([z.string(), z.number().int()])
       .describe("The ID of the consumable card to use from your consumable slots."),
+    targets: z
+      .array(cardIdSchema)
+      .optional()
+      .describe("Optional target card IDs for consumables that operate on hand cards. Omit for cards that take no targets."),
     response_format: z
       .enum(["markdown", "json"])
       .default("markdown")
@@ -53,12 +57,15 @@ const ANNOTATIONS = {
 async function executeCardAction(
   deps: Deps,
   kind: "use_consumable" | "sell_card",
-  cardId: string,
+  cardId: CardId,
   format: ResponseFormat,
+  targetCardIds?: CardId[],
 ) {
   let response;
   try {
-    const seq = await deps.bridgeClient.sendCommand({ kind, args: { card_id: cardId } });
+    const args: Record<string, unknown> = { card_id: cardId };
+    if (targetCardIds) args.target_card_ids = targetCardIds;
+    const seq = await deps.bridgeClient.sendCommand({ kind, args });
     response = await deps.bridgeClient.awaitResponse(seq);
   } catch (err) {
     if (err instanceof BridgeError) {
@@ -96,7 +103,8 @@ export function registerCardActionTools(server: McpServer, deps: Deps): void {
     },
     async (args) => {
       const format: ResponseFormat = args.response_format ?? "markdown";
-      const envelope = await executeCardAction(deps, "use_consumable", normalizeCardId(args.card_id), format);
+      const targets = args.targets ? normalizeCardIds(args.targets) : undefined;
+      const envelope = await executeCardAction(deps, "use_consumable", normalizeCardId(args.card_id), format, targets);
       return { ...envelope };
     },
   );

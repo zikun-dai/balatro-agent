@@ -325,6 +325,7 @@ local function compute_legal_actions()
   local BUFFOON_PACK = STATES.BUFFOON_PACK or 21
   local ROUND_EVAL = STATES.ROUND_EVAL or 15
   local SMODS_BOOSTER_OPENED = STATES.SMODS_BOOSTER_OPENED or 22
+  local MENU = STATES.MENU or 1
 
   -- Pack states
   local pack_states = {
@@ -400,6 +401,11 @@ local function compute_legal_actions()
 
   elseif gs == ROUND_EVAL then
     actions[#actions + 1] = 'cash_out'
+
+  elseif gs == MENU then
+    actions[#actions + 1] = 'start_run'
+  elseif gs == (STATES.GAME_OVER or 7) then
+    actions[#actions + 1] = 'return_to_menu'
   end
 
   return actions
@@ -796,7 +802,8 @@ function state.write(bridge_dir)
   f:write(json_str)
   f:close()
 
-  -- Atomic rename
+  -- Windows does not allow os.rename to replace an existing file.
+  os.remove(final_path)
   local ok, rename_err = os.rename(tmp_path, final_path)
   if not ok then return false end
 

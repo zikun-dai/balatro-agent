@@ -5,7 +5,7 @@ import type { Deps } from "../deps.js";
 import { formatResponse, type ResponseFormat } from "../response.js";
 import { toolError } from "../errors.js";
 import { BridgeError } from "../bridge/client.js";
-import { cardIdSchema, normalizeCardId, normalizeCardIds } from "./cardIds.js";
+import { cardIdSchema, normalizeCardId, normalizeCardIds, type CardId } from "./cardIds.js";
 
 const OPEN_BOOSTER_DESCRIPTION =
   "Opens a Booster Pack that you have already purchased from the shop, revealing the cards inside for selection. " +
@@ -86,8 +86,8 @@ const SKIP_BOOSTER_ANNOTATIONS = {
 async function executeBoosterCommand(
   deps: Deps,
   command:
-    | { kind: "open_booster"; args: { card_id: string } }
-    | { kind: "select_booster_card"; args: { card_id: string; targets?: string[] } }
+    | { kind: "open_booster"; args: { card_id: CardId } }
+    | { kind: "select_booster_card"; args: { card_id: CardId; target_card_ids?: CardId[] } }
     | { kind: "skip_booster" },
   format: ResponseFormat,
 ) {
@@ -158,7 +158,7 @@ export function registerBoosterTools(server: McpServer, deps: Deps): void {
       const targets = args.targets ? normalizeCardIds(args.targets) : undefined;
       const envelope = await executeBoosterCommand(
         deps,
-        { kind: "select_booster_card", args: { card_id: cardId, targets } },
+        { kind: "select_booster_card", args: { card_id: cardId, target_card_ids: targets } },
         format,
       );
       return { ...envelope };

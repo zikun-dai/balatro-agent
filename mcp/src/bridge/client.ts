@@ -96,6 +96,23 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+async function newestExistingFile(paths: string[]): Promise<{ path: string; mtimeMs: number } | undefined> {
+  let newest: { path: string; mtimeMs: number } | undefined;
+
+  for (const path of paths) {
+    try {
+      const stat = await fs.stat(path);
+      if (!stat.isFile()) continue;
+      if (!newest || stat.mtimeMs > newest.mtimeMs) {
+        newest = { path, mtimeMs: stat.mtimeMs };
+      }
+    } catch {
+    }
+  }
+
+  return newest;
+}
+
 function seqFromFilename(name: string): number | undefined {
   const match = /^(\d+)\.json$/.exec(name);
   if (!match) return undefined;
@@ -186,14 +203,22 @@ export class BridgeClient {
     this.assertConnected();
     await this.assertGameRunning();
 
-    const statePath = join(this.bridgeDir, "state.json");
+    const statePaths = [
+      join(this.bridgeDir, "state.json"),
+      join(this.bridgeDir, "state.json.tmp"),
+    ];
     const maxAge = options?.maxAgeMs ?? HEARTBEAT_STALE_MS;
 
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt < STATE_RETRY_COUNT; attempt++) {
       try {
-        const raw = await fs.readFile(statePath, "utf-8");
+        const stateFile = await newestExistingFile(statePaths);
+        if (!stateFile) {
+          throw new BridgeError("GAME_NOT_RUNNING", "state.json not found — game may not be running");
+        }
+
+        const raw = await fs.readFile(stateFile.path, "utf-8");
         const state: StateEnvelope = JSON.parse(raw);
 
         if (state.protocol_version !== PROTOCOL_VERSION) {
@@ -210,8 +235,7 @@ export class BridgeClient {
           );
         }
 
-        const stat = await fs.stat(statePath);
-        const ageMs = Date.now() - stat.mtimeMs;
+        const ageMs = Date.now() - stateFile.mtimeMs;
         if (ageMs > maxAge) {
           throw new BridgeError(
             "STATE_STALE",
@@ -338,11 +362,21 @@ export class BridgeClient {
   }
 
   private async assertGameRunning(): Promise<void> {
-    const heartbeatPath = join(this.bridgeDir, "heartbeat.json");
+    const heartbeatPaths = [
+      join(this.bridgeDir, "heartbeat.json"),
+      join(this.bridgeDir, "heartbeat.json.tmp"),
+    ];
 
     try {
-      const stat = await fs.stat(heartbeatPath);
-      const ageMs = Date.now() - stat.mtimeMs;
+      const heartbeatFile = await newestExistingFile(heartbeatPaths);
+      if (!heartbeatFile) {
+        throw new BridgeError(
+          "GAME_NOT_RUNNING",
+          "heartbeat.json not found — game is not running",
+        );
+      }
+
+      const ageMs = Date.now() - heartbeatFile.mtimeMs;
       if (ageMs > HEARTBEAT_STALE_MS) {
         throw new BridgeError(
           "GAME_NOT_RUNNING",
